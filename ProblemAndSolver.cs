@@ -633,11 +633,15 @@ namespace TSP
                     {
                         Matrix includeMatrix = new Matrix(curMatrix);
                         includeMatrix.Include(nextRow, bestCol);
-                        Matrix excludeMatrix = new Matrix(curMatrix);
-                        excludeMatrix.Exclude(nextRow, bestCol);
-
                         queue.Enqueue(includeMatrix);
-                        queue.Enqueue(excludeMatrix);
+
+                        if (curMatrix.getNumberOfCitiesLeftToVisit() <= 5)
+                        {
+                            Matrix excludeMatrix = new Matrix(curMatrix);
+                            excludeMatrix.Exclude(nextRow, bestCol);
+                            queue.Enqueue(excludeMatrix);
+                        }
+                         
                     }
                 }
             }
@@ -819,11 +823,16 @@ namespace TSP
         //How much we care about the next city
         private double tspGAMMA = 0.3;
         //tspW / best length = added to AQ values
-        private int tspW = 1000;
+        private int tspW = 100;
         //number of time tours built
-        private int iterations = 500;
+        private int iterations = 50;
         public void groupTSP()
         {
+            //we want the base weight to be in the ballpark of the solution
+            greedy();
+            tspW = Convert.ToInt32(Math.Round(costOfBssf()));
+
+
             // initialize AQ matrix
             int NUM_ANTS = Cities.Length;
             int bestAnt = 0;
@@ -901,7 +910,10 @@ namespace TSP
                         // update AQ
                         AQ[ants[j].prevCity, ants[j].curCity] =
                             (1 - tspALPHA) * AQ[ants[j].prevCity, ants[j].curCity] // percent old
-                            + Math.Log(tspALPHA * tspGAMMA * maxAQ);
+                            //+ tspALPHA * tspGAMMA * maxAQ;
+                            + tspGAMMA * maxAQ; //percent new (should be more than 100% now
+                        if (AQ[ants[j].prevCity, ants[j].curCity] > 1)
+                            AQ[ants[j].prevCity, ants[j].curCity] = 1;
                     }
                 }// end looping over tours. We now have complete tours.
 
@@ -926,7 +938,7 @@ namespace TSP
                     for (int j = 0; j < Cities.Length; j++)
                     {
                         double deltaAQ = ants[bestAnt].tour[i] == j ? tspW / ants[bestAnt].curCost : 0;
-                        AQ[i, j] = (1 - tspALPHA) * AQ[i, j] + Math.Log(tspALPHA * deltaAQ);
+                        AQ[i, j] = (1 - tspALPHA) * AQ[i, j] + tspALPHA * deltaAQ;
                     }
                 }
             }

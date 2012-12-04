@@ -157,7 +157,7 @@ namespace TSP
         private void greedyToolStripMenuItem_Click(object sender, EventArgs e)
         {
             this.reset();
-
+            // TODO: Add a hook into your own implementation here.
             CityData.greedy();
         }
 
