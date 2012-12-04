@@ -547,6 +547,103 @@ namespace TSP
             }
         }
 
+
+        public void greedy()
+        {
+            Matrix baseMatrix = new Matrix(Cities);
+            double minCost = baseMatrix.getMinCost();
+            double upperBound = costOfBssf();
+
+            PriorityQueue2<Matrix> queue = new PriorityQueue2<Matrix>();
+            queue.Enqueue(baseMatrix);
+
+
+            System.Diagnostics.Stopwatch timer = new System.Diagnostics.Stopwatch();
+            timer.Start();
+
+            while (queue.Count > 0)
+            {
+                //we exit our search once we hit 30 seconds
+                if (timer.ElapsedMilliseconds > 30000)
+                    break;
+
+                Matrix curMatrix = queue.Dequeue();
+                if (curMatrix.getNumberOfCitiesLeftToVisit() == 1)
+                {
+                    int[] exited = curMatrix.getCitiesExited();
+                    int[] entered = curMatrix.getCitiesEntered();
+                    ArrayList solution = new ArrayList();
+
+                    int startCity = 0;
+                    for (int i = 0; i < entered.Length; i++)
+                    {
+                        if (entered[i] == -1)
+                        {
+                            startCity = i;
+                            break;
+                        }
+                    }
+
+                    while (startCity != -1)
+                    {
+                        solution.Add(Cities[startCity]);
+                        startCity = exited[startCity];
+                    }
+
+                    bssf = new TSPSolution(solution);
+                    upperBound = costOfBssf();
+                    timer.Stop();
+                    TimeSpan ts2 = timer.Elapsed;
+                    Program.MainForm.tbElapsedTime.Text = " " + ts2.TotalSeconds;
+                    // update the cost of the tour. 
+                    Program.MainForm.tbCostOfTour.Text = " " + bssf.costOfRoute();
+                    // do a refresh. 
+                    Program.MainForm.Invalidate();
+                    return;
+                }
+                else
+                {
+
+                    int nextRow = curMatrix.getNextRow();
+                    int bestCol = -1;
+                    double curIncludeCost = -1;
+                    double curExcludeCost = -1;
+                    double curDifference = -1;
+                    double bestDifferenceSoFar = double.NegativeInfinity;
+
+                    for (int j = 0; j < Cities.Length; j++)
+                    {
+                        curIncludeCost = curMatrix.getIncludeCost(nextRow, j);
+                        curExcludeCost = curMatrix.getExcludeCost(nextRow, j);
+                        curDifference = curExcludeCost - curIncludeCost;
+                        if (curDifference > bestDifferenceSoFar)
+                        {
+                            bestDifferenceSoFar = curDifference;
+                            bestCol = j;
+                        }
+                        //We stop as soon as we hit one that is positive infinity
+                        if (double.IsPositiveInfinity(bestDifferenceSoFar))
+                        {
+                            break;
+                        }
+                    }
+
+                    //If we ever get to a point with no solutions, skip it, it does not have our solution
+                    if (bestCol != -1)
+                    {
+                        Matrix includeMatrix = new Matrix(curMatrix);
+                        includeMatrix.Include(nextRow, bestCol);
+                        Matrix excludeMatrix = new Matrix(curMatrix);
+                        excludeMatrix.Exclude(nextRow, bestCol);
+
+                        queue.Enqueue(includeMatrix);
+                        queue.Enqueue(excludeMatrix);
+                    }
+                }
+            }
+
+        }
+
         public void branchAndBound()
         {
             System.Diagnostics.Stopwatch timer = new System.Diagnostics.Stopwatch();
