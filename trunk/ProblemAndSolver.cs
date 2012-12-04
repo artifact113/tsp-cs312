@@ -547,6 +547,22 @@ namespace TSP
             }
         }
 
+        public void random()
+        {
+            Route = new ArrayList();
+            // this is the trivial solution. 
+            for (int x = 0; x < Cities.Length; x++)
+            {
+                Route.Add(Cities[x]);
+            }
+            // call this the best solution so far.  bssf is the route that will be drawn by the Draw method. 
+            bssf = new TSPSolution(Route);
+            // update the cost of the tour. 
+            Program.MainForm.tbCostOfTour.Text = " " + bssf.costOfRoute();
+            // do a refresh. 
+            Program.MainForm.Invalidate();
+        }
+
 
         public void greedy()
         {
@@ -682,8 +698,7 @@ namespace TSP
             pq.Enqueue(s,0);
 
             // loop - while !empty and cost < bssf{   
-            System.TimeSpan timeout = new System.TimeSpan(0, 0, 30);
-            while (pq.Count > 0 && timer.Elapsed < timeout)
+            while (pq.Count > 0)
             {
                 state cur = pq.Dequeue();
                 if (cur.cost > bsf)
