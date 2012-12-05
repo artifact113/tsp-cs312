@@ -579,10 +579,6 @@ namespace TSP
 
             while (queue.Count > 0)
             {
-                //we exit our search once we hit 30 seconds
-                if (timer.ElapsedMilliseconds > 30000)
-                    break;
-
                 Matrix curMatrix = queue.Dequeue();
                 if (curMatrix.getNumberOfCitiesLeftToVisit() == 1)
                 {
@@ -647,9 +643,8 @@ namespace TSP
                     //If we ever get to a point with no solutions, skip it, it does not have our solution
                     if (bestCol != -1)
                     {
-                        Matrix includeMatrix = new Matrix(curMatrix);
-                        includeMatrix.Include(nextRow, bestCol);
-                        queue.Enqueue(includeMatrix);
+                        curMatrix.Include(nextRow, bestCol);
+                        queue.Enqueue(curMatrix);
 
                         if (curMatrix.getNumberOfCitiesLeftToVisit() <= 5)
                         {
@@ -661,7 +656,6 @@ namespace TSP
                     }
                 }
             }
-
         }
 
         public void branchAndBound()
@@ -799,26 +793,25 @@ namespace TSP
             Program.MainForm.Invalidate();
         } // end function   
 
-        private class AGENT
+        private class Ant
         {
-            public HashSet<int> yetToVisit;
+            public HashSet<int> unvisited;
             public int startCity;
             public int curCity;
             public int prevCity;
             public int[] tour;
             public double curCost;
 
-            public AGENT(int cities, int start)
+            public Ant(int cities, int start)
             {
                 // initialize agents
                 tour = new int[cities];
                 startCity = start;
-                yetToVisit = new HashSet<int>();
+                unvisited = new HashSet<int>();
                 for (int i = 0; i < cities; i++)
                 {
-                    // add all cities except start city to yetToVisit
-                    if (i != startCity)
-                        yetToVisit.Add(i);
+                    if (i != start)
+                        unvisited.Add(i);
                 }
                 curCity = start;
                 prevCity = -1;
@@ -826,145 +819,183 @@ namespace TSP
             }
         }
 
-        //chooses the next cities these are used as exponents
-        private int tspDELTA = 1;
-        private double tspBETA = 2.0;
-        //initial value
-        private int tspAQ0 = 1;
-        //not used currently (probability of randomly picking the next city over the heuristic)
-        private double tspQ0 = 0.9;
-        //(1-alpha) is how much of old value we keep when updating AQs
-        private double tspALPHA = 0.05;
-        //How much we care about the next city
-        private double tspGAMMA = 0.3;
-        //tspW / best length = added to AQ values
-        private int tspW = 100;
-        //number of time tours built
-        private int iterations = 50;
         public void groupTSP()
         {
-            //we want the base weight to be in the ballpark of the solution
-            greedy();
-            tspW = Convert.ToInt32(Math.Round(costOfBssf()));
+            const int ITERATIONS = 50;
+            const double Q0 = 0.9;
+            const double BETA = 50.0;
+            const double ALPHA = 0.1;
 
+            // get cost from nearest neighbor, used in our heuristic
+            double totalCost = 0;
+            int start = 0;
+            HashSet<int> visitedCities = new HashSet<int>() { start };
+            int current2 = start;
+            do
+	        {
+                int bestCity = -1;
+                double bestCost2 = Double.PositiveInfinity;
+	            for (int i = 0; i < Cities.Length; i++)
+                {
+                    if (!visitedCities.Contains(i))
+	                {
+		                double cost = Cities[current2].costToGetTo(Cities[i]);
+                        if (cost < bestCost2)
+                        {
+                            bestCity = i;
+		                    bestCost2 = cost;
+                        }
+	                }
+                }
 
-            // initialize AQ matrix
-            int NUM_ANTS = Cities.Length;
-            int bestAnt = 0;
-            double[,] AQ = new double[Cities.Length, Cities.Length];
+                totalCost += bestCost2;
+                visitedCities.Add(bestCity);
+                current2 = bestCity;
+	        } while (visitedCities.Count != Cities.Length - 1);
+            totalCost += Cities[current2].costToGetTo(Cities[start]);
+
+            double nnCost = totalCost;
+
+            // our fastest ant through all the iterations
+            Ant bestAnt = null;
+            double bestCost = Double.PositiveInfinity;
+
+            // initialize pheramone level matrix
+            double[,] pheromoneLevels = new double[Cities.Length, Cities.Length];
             for (int i = 0; i < Cities.Length; i++)
             {
                 for (int j = 0; j < Cities.Length; j++)
                 {
-                    AQ[i, j] = tspAQ0;
+                    pheromoneLevels[i, j] = 1.0 / Cities.Length;
                 }
             }
 
-            // initialize agents
-            AGENT[] ants = new AGENT[NUM_ANTS];
-
-            // iterations
-            for (int h = 0; h < iterations; h++)
+            // start iterations
+            for (int h = 0; h < ITERATIONS; h++)
             {
-                // init agents each time
-                for (int i = 0; i < NUM_ANTS; i++)
-                {
-                    ants[i] = new AGENT(Cities.Length, i);
-                }
-
-                // Build Tours
-                for (int i = 0; i < Cities.Length - 1; i++)
-                { // loop over each location in tour
-                    for (int j = 0; j < NUM_ANTS; j++)
-                    { // loop over each agent
-                        int nextCity = -1;
-                        double bestScore = -1;
-                        double length = 0;
-                        // loop over possible next cities
-                        foreach (int k in ants[j].yetToVisit)
-                        {
-                            double dist = Cities[ants[j].curCity].costToGetTo(Cities[k]);
-                            double score = dist == double.PositiveInfinity ? 0 :
-                                Math.Pow(AQ[ants[j].tour[i], k], tspDELTA) *
-                                Math.Pow(1 / dist, tspBETA);
-                            if (score > bestScore)
-                            { // if best so far, save
-                                nextCity = k;
-                                bestScore = score;
-                                length = dist;
-                            }
-                        }
-                        // if all cities invalid, just pick one and notice this agent
-                        // has an invalid tour later.
-                        if (nextCity == -1)
-                        {
-                            HashSet<int>.Enumerator e = ants[j].yetToVisit.GetEnumerator();
-                            e.MoveNext();
-                            nextCity = e.Current;
-                            length = Cities[ants[j].curCity].costToGetTo(Cities[nextCity]);
-                        }
-
-                        // add the picked city to the tour
-                        ants[j].prevCity = ants[j].curCity;
-                        ants[j].tour[ants[j].curCity] = nextCity;
-                        ants[j].curCity = nextCity;
-                        ants[j].yetToVisit.Remove(nextCity);
-                        ants[j].curCost += length;
-                    }
-                    // loop over agents again, this time for reinforcement learning
-                    for (int j = 0; j < NUM_ANTS; j++)
-                    {
-                        // find max
-                        double maxAQ = double.NegativeInfinity;
-                        foreach (int k in ants[j].yetToVisit)
-                        {
-                            if (AQ[ants[j].curCity, k] > maxAQ)
-                                maxAQ = AQ[ants[j].curCity, k];
-                        }
-
-                        // update AQ
-                        AQ[ants[j].prevCity, ants[j].curCity] =
-                            (1 - tspALPHA) * AQ[ants[j].prevCity, ants[j].curCity] // percent old
-                            //+ tspALPHA * tspGAMMA * maxAQ;
-                            + tspGAMMA * maxAQ; //percent new (should be more than 100% now
-                        if (AQ[ants[j].prevCity, ants[j].curCity] > 1)
-                            AQ[ants[j].prevCity, ants[j].curCity] = 1;
-                    }
-                }// end looping over tours. We now have complete tours.
-
-                // Do Iteration Reinforcement
-                // First, find best tour of iteration
-                bestAnt = 0;
-                // finish calculating cost
-                ants[0].curCost += Cities[ants[0].curCity].costToGetTo(Cities[ants[0].startCity]);
-                for (int i = 1; i < NUM_ANTS; i++)
-                {
-                    // finish calculating cost
-                    ants[i].curCost += Cities[ants[i].curCity].costToGetTo(Cities[ants[i].startCity]);
-                    ants[i].tour[ants[i].curCity] = ants[i].startCity;
-                    // keep track of best
-                    if (ants[i].curCost < ants[bestAnt].curCost)
-                        bestAnt = i;
-                }
-
-                // loop over all AQs and update
+                // initialize ants
+                List<Ant> ants = new List<Ant>();
                 for (int i = 0; i < Cities.Length; i++)
                 {
-                    for (int j = 0; j < Cities.Length; j++)
+                    ants.Add(new Ant(Cities.Length, i));
+                }
+
+                // iterate through each time step
+                for (int i = 0; i < Cities.Length - 1; i++)
+                {
+                    // determine each ants next move
+                    List<Ant> remainingAnts = new List<Ant>(ants);
+                    foreach (Ant ant in remainingAnts)
                     {
-                        double deltaAQ = ants[bestAnt].tour[i] == j ? tspW / ants[bestAnt].curCost : 0;
-                        AQ[i, j] = (1 - tspALPHA) * AQ[i, j] + tspALPHA * deltaAQ;
+                        int nextCity = -1;
+                        double nextDistance = Double.PositiveInfinity;
+
+                        Random random = new Random();
+                        double q = random.NextDouble();
+                        if (q < Q0)
+                        {
+                            // select next city based on distance / pheramone only
+                            double bestScore = Double.NegativeInfinity;
+                            foreach (int city in ant.unvisited)
+                            {
+                                double distance = Cities[ant.curCity].costToGetTo(Cities[city]);
+                                double score = pheromoneLevels[ant.curCity, city] * Math.Pow(1 / distance, BETA);
+                                if (score > bestScore)
+                                {
+                                    nextCity = city;
+                                    bestScore = score;
+                                    nextDistance = distance;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // select city randomly with different weights given to each city based on distance / pheramone
+                            double runningTotal = 0.0;
+                            double randomValue = random.NextDouble();
+
+                            // get sum of scores
+                            double summedScores = 0.0;
+                            foreach (int city in ant.unvisited)
+                            {
+                                double distance = Cities[ant.curCity].costToGetTo(Cities[city]);
+                                summedScores += pheromoneLevels[ant.curCity, city] * Math.Pow(1 / distance, BETA);
+                            }
+
+                            // determine probability for each city
+                            foreach (int city in ant.unvisited)
+                            {
+                                double distance = Cities[ant.curCity].costToGetTo(Cities[city]);
+                                runningTotal += (pheromoneLevels[ant.curCity, city] * Math.Pow(1 / distance, BETA)) / summedScores;
+                                if (runningTotal > randomValue)
+                                {
+                                    nextCity = city;
+                                    nextDistance = distance;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (nextCity != -1)
+                        {
+                            // apply local trail updating
+                            pheromoneLevels[ant.curCity, nextCity] += (1 - ALPHA) * pheromoneLevels[ant.curCity, nextCity] + ALPHA * (1 / (Cities.Length * nnCost));
+
+                            // add the picked city to the tour
+                            ant.tour[ant.curCity] = nextCity;
+                            ant.unvisited.Remove(nextCity);
+                            ant.curCost += nextDistance;
+                            ant.prevCity = ant.curCity;
+                            ant.curCity = nextCity;
+                        }
+                        else
+                        {
+                            //deal with stuck ant
+                            ants.Remove(ant);
+                        }
                     }
+                }
+
+                // finalize tours and find best ant
+                foreach (Ant ant in ants)
+                {
+                    // finalize tour
+                    ant.tour[ant.curCity] = ant.startCity;
+                    ant.curCost += Cities[ant.curCity].costToGetTo(Cities[ant.startCity]);
+
+                    // check against current best cost
+                    if (ant.curCost < bestCost)
+                    {
+                        bestAnt = ant;
+                        bestCost = ant.curCost;
+                    }
+                }
+
+                if (bestAnt != null)
+                {
+                    // apply global trail updating
+                    int current = bestAnt.startCity;
+                    do
+	                {
+                        pheromoneLevels[current, bestAnt.tour[current]] += (1 - ALPHA) * pheromoneLevels[current, bestAnt.tour[current]] + ALPHA * (1 / bestCost);
+                        current = bestAnt.tour[current];
+	                } while (current != bestAnt.startCity);
+
                 }
             }
 
-            ArrayList route = new ArrayList();
-            int cityInd = ants[bestAnt].startCity;
-            do{
-                route.Add(Cities[cityInd]);
-                cityInd = ants[bestAnt].tour[cityInd];
-            } while (cityInd != ants[bestAnt].startCity);
-            bssf = new TSPSolution(route);
+            if (bestAnt != null)
+            {
+                ArrayList route = new ArrayList();
+                int curCity = bestAnt.startCity;
+                do
+                {
+                    route.Add(Cities[curCity]);
+                    curCity = bestAnt.tour[curCity];
+                } while (curCity != bestAnt.startCity);
+                bssf = new TSPSolution(route);
+            }
+
             Program.MainForm.tbCostOfTour.Text = " " + bssf.costOfRoute();
             // do a refresh. 
             Program.MainForm.Invalidate();
