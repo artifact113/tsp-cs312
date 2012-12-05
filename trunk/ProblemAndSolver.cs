@@ -566,96 +566,56 @@ namespace TSP
 
         public void greedy()
         {
-            Matrix baseMatrix = new Matrix(Cities);
-            double minCost = baseMatrix.getMinCost();
-            double upperBound = costOfBssf();
-
-            PriorityQueue2<Matrix> queue = new PriorityQueue2<Matrix>();
-            queue.Enqueue(baseMatrix);
-
 
             System.Diagnostics.Stopwatch timer = new System.Diagnostics.Stopwatch();
-            timer.Start();
 
-            while (queue.Count > 0)
+            // get cost from nearest neighbor
+            Random rand = new Random();
+            double totalCost = double.PositiveInfinity;
+            int start = 0;
+            HashSet<int> visitedCities = new HashSet<int>() { start };
+            ArrayList path = new ArrayList();
+
+            while (double.IsInfinity(totalCost) || double.IsNaN(totalCost))
             {
-                Matrix curMatrix = queue.Dequeue();
-                if (curMatrix.getNumberOfCitiesLeftToVisit() == 1)
+                totalCost = 0;
+                start = rand.Next(Cities.Length);
+                visitedCities = new HashSet<int>() { start };
+                path = new ArrayList(start);
+
+                int current2 = start;
+                do
                 {
-                    int[] exited = curMatrix.getCitiesExited();
-                    int[] entered = curMatrix.getCitiesEntered();
-                    ArrayList solution = new ArrayList();
-
-                    int startCity = 0;
-                    for (int i = 0; i < entered.Length; i++)
+                    int bestCity = -1;
+                    double bestCost2 = Double.PositiveInfinity;
+                    for (int i = 0; i < Cities.Length; i++)
                     {
-                        if (entered[i] == -1)
+                        if (!visitedCities.Contains(i))
                         {
-                            startCity = i;
-                            break;
+                            double cost = Cities[current2].costToGetTo(Cities[i]);
+                            if (cost < bestCost2)
+                            {
+                                bestCity = i;
+                                bestCost2 = cost;
+                            }
                         }
                     }
 
-                    while (startCity != -1)
-                    {
-                        solution.Add(Cities[startCity]);
-                        startCity = exited[startCity];
-                    }
-
-                    bssf = new TSPSolution(solution);
-                    upperBound = costOfBssf();
-                    timer.Stop();
-                    TimeSpan ts2 = timer.Elapsed;
-                    Program.MainForm.tbElapsedTime.Text = " " + ts2.TotalSeconds;
-                    // update the cost of the tour. 
-                    Program.MainForm.tbCostOfTour.Text = " " + bssf.costOfRoute();
-                    // do a refresh. 
-                    Program.MainForm.Invalidate();
-                    return;
-                }
-                else
-                {
-
-                    int nextRow = curMatrix.getNextRow();
-                    int bestCol = -1;
-                    double curIncludeCost = -1;
-                    double curExcludeCost = -1;
-                    double curDifference = -1;
-                    double bestDifferenceSoFar = double.NegativeInfinity;
-
-                    for (int j = 0; j < Cities.Length; j++)
-                    {
-                        curIncludeCost = curMatrix.getIncludeCost(nextRow, j);
-                        curExcludeCost = curMatrix.getExcludeCost(nextRow, j);
-                        curDifference = curExcludeCost - curIncludeCost;
-                        if (curDifference > bestDifferenceSoFar)
-                        {
-                            bestDifferenceSoFar = curDifference;
-                            bestCol = j;
-                        }
-                        //We stop as soon as we hit one that is positive infinity
-                        if (double.IsPositiveInfinity(bestDifferenceSoFar))
-                        {
-                            break;
-                        }
-                    }
-
-                    //If we ever get to a point with no solutions, skip it, it does not have our solution
-                    if (bestCol != -1)
-                    {
-                        curMatrix.Include(nextRow, bestCol);
-                        queue.Enqueue(curMatrix);
-
-                        if (curMatrix.getNumberOfCitiesLeftToVisit() <= 5)
-                        {
-                            Matrix excludeMatrix = new Matrix(curMatrix);
-                            excludeMatrix.Exclude(nextRow, bestCol);
-                            queue.Enqueue(excludeMatrix);
-                        }
-                         
-                    }
-                }
+                    totalCost += bestCost2;
+                    visitedCities.Add(bestCity);
+                    path.Add(bestCity);
+                    current2 = bestCity;
+                } while (visitedCities.Count != Cities.Length - 1);
+                totalCost += Cities[current2].costToGetTo(Cities[start]);
             }
+
+            bssf = new TSPSolution(path);
+
+            timer.Stop();
+
+            Program.MainForm.tbCostOfTour.Text = " " + bssf.costOfRoute();
+            Program.MainForm.tbElapsedTime.Text = Convert.ToString(timer.Elapsed);
+
         }
 
         public void branchAndBound()
@@ -826,35 +786,14 @@ namespace TSP
             const double BETA = 50.0;
             const double ALPHA = 0.1;
 
+
+            //Start our timer
+            System.Diagnostics.Stopwatch timer = new System.Diagnostics.Stopwatch();
+
             // get cost from nearest neighbor, used in our heuristic
-            double totalCost = 0;
-            int start = 0;
-            HashSet<int> visitedCities = new HashSet<int>() { start };
-            int current2 = start;
-            do
-	        {
-                int bestCity = -1;
-                double bestCost2 = Double.PositiveInfinity;
-	            for (int i = 0; i < Cities.Length; i++)
-                {
-                    if (!visitedCities.Contains(i))
-	                {
-		                double cost = Cities[current2].costToGetTo(Cities[i]);
-                        if (cost < bestCost2)
-                        {
-                            bestCity = i;
-		                    bestCost2 = cost;
-                        }
-	                }
-                }
+            greedy();
 
-                totalCost += bestCost2;
-                visitedCities.Add(bestCity);
-                current2 = bestCity;
-	        } while (visitedCities.Count != Cities.Length - 1);
-            totalCost += Cities[current2].costToGetTo(Cities[start]);
-
-            double nnCost = totalCost;
+            double nnCost = costOfBssf();
 
             // our fastest ant through all the iterations
             Ant bestAnt = null;
@@ -996,7 +935,11 @@ namespace TSP
                 bssf = new TSPSolution(route);
             }
 
+            timer.Stop();
+
             Program.MainForm.tbCostOfTour.Text = " " + bssf.costOfRoute();
+            Program.MainForm.tbElapsedTime.Text = Convert.ToString(timer.Elapsed);
+
             // do a refresh. 
             Program.MainForm.Invalidate();
         }
