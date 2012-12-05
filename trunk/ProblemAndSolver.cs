@@ -286,6 +286,10 @@ namespace TSP
         /// </summary>
         public void solveProblem()
         {
+            // start our timer
+            System.Diagnostics.Stopwatch timer = new System.Diagnostics.Stopwatch();
+            timer.Start();
+
             int x;
             Route = new ArrayList(); 
             // this is the trivial solution. 
@@ -295,11 +299,12 @@ namespace TSP
             }
             // call this the best solution so far.  bssf is the route that will be drawn by the Draw method. 
             bssf = new TSPSolution(Route);
-            // update the cost of the tour. 
+
             Program.MainForm.tbCostOfTour.Text = " " + bssf.costOfRoute();
+            Program.MainForm.tbElapsedTime.Text = Convert.ToString(timer.Elapsed);
+
             // do a refresh. 
             Program.MainForm.Invalidate();
-
         }   
         #endregion
 
@@ -549,6 +554,10 @@ namespace TSP
 
         public void random()
         {
+            // start our timer
+            System.Diagnostics.Stopwatch timer = new System.Diagnostics.Stopwatch();
+            timer.Start();
+
             Route = new ArrayList();
             // this is the trivial solution. 
             for (int x = 0; x < Cities.Length; x++)
@@ -557,17 +566,17 @@ namespace TSP
             }
             // call this the best solution so far.  bssf is the route that will be drawn by the Draw method. 
             bssf = new TSPSolution(Route);
-            // update the cost of the tour. 
-            Program.MainForm.tbCostOfTour.Text = " " + bssf.costOfRoute();
-            // do a refresh. 
-            Program.MainForm.Invalidate();
+            
+            Program.MainForm.tbCostOfTour.Text = "" + bssf.costOfRoute();
+            Program.MainForm.tbElapsedTime.Text = Convert.ToString(timer.Elapsed);
         }
 
 
         public void greedy()
         {
-
+            // start our timer
             System.Diagnostics.Stopwatch timer = new System.Diagnostics.Stopwatch();
+            timer.Start();
 
             // get cost from nearest neighbor
             Random rand = new Random();
@@ -581,52 +590,54 @@ namespace TSP
                 totalCost = 0;
                 start = rand.Next(Cities.Length);
                 visitedCities = new HashSet<int>() { start };
-                path = new ArrayList(start);
+                path = new ArrayList() { Cities[start] };
 
-                int current2 = start;
+                int current = start;
                 do
                 {
                     int bestCity = -1;
-                    double bestCost2 = Double.PositiveInfinity;
+                    double bestCost = Double.PositiveInfinity;
                     for (int i = 0; i < Cities.Length; i++)
                     {
                         if (!visitedCities.Contains(i))
                         {
-                            double cost = Cities[current2].costToGetTo(Cities[i]);
-                            if (cost < bestCost2)
+                            double cost = Cities[current].costToGetTo(Cities[i]);
+                            if (cost < bestCost)
                             {
                                 bestCity = i;
-                                bestCost2 = cost;
+                                bestCost = cost;
                             }
                         }
                     }
 
-                    totalCost += bestCost2;
+                    totalCost += bestCost;
                     visitedCities.Add(bestCity);
-                    path.Add(bestCity);
-                    current2 = bestCity;
-                } while (visitedCities.Count != Cities.Length - 1);
-                totalCost += Cities[current2].costToGetTo(Cities[start]);
+                    path.Add(Cities[bestCity]);
+                    current = bestCity;
+                } while (visitedCities.Count != Cities.Length);
+                totalCost += Cities[current].costToGetTo(Cities[start]);
             }
 
             bssf = new TSPSolution(path);
 
             timer.Stop();
 
-            Program.MainForm.tbCostOfTour.Text = " " + bssf.costOfRoute();
+            Program.MainForm.tbCostOfTour.Text = "" + bssf.costOfRoute();
             Program.MainForm.tbElapsedTime.Text = Convert.ToString(timer.Elapsed);
 
         }
 
         public void branchAndBound()
         {
+            // start our timer
             System.Diagnostics.Stopwatch timer = new System.Diagnostics.Stopwatch();
+            timer.Start();
+
             int solNumber = 0;
             int statesCreated = 0;
             int branchesConsidered = 0;
             int statesStored = 0;
             int statesPruned = 0;
-            timer.Start();
 
             // generate bssf
             initBSSF();
@@ -745,8 +756,7 @@ namespace TSP
 
             Program.MainForm.tbCostOfTour.Text = " " + bssf.costOfRoute();
             Program.MainForm.tbElapsedTime.Text = Convert.ToString(timer.Elapsed);
-            Program.MainForm.tbStateInfo.Text = Convert.ToString(statesCreated) + "-" +
-                Convert.ToString(statesStored) + "-" + Convert.ToString(statesPruned);
+            Program.MainForm.tbStateInfo.Text = Convert.ToString(statesCreated) + "-" + Convert.ToString(statesStored) + "-" + Convert.ToString(statesPruned);
             Program.MainForm.tbInitialBSF.Text = Convert.ToString(initial);
             Program.MainForm.tbSolutionNum.Text = Convert.ToString(solNumber);
             // do a refresh. 
@@ -781,14 +791,15 @@ namespace TSP
 
         public void groupTSP()
         {
+            // start our timer
+            System.Diagnostics.Stopwatch timer = new System.Diagnostics.Stopwatch();
+            timer.Start();
+
+            // constants used in heuristics
             const int ITERATIONS = 50;
             const double Q0 = 0.9;
             const double BETA = 50.0;
             const double ALPHA = 0.1;
-
-
-            //Start our timer
-            System.Diagnostics.Stopwatch timer = new System.Diagnostics.Stopwatch();
 
             // get cost from nearest neighbor, used in our heuristic
             greedy();
@@ -812,6 +823,10 @@ namespace TSP
             // start iterations
             for (int h = 0; h < ITERATIONS; h++)
             {
+                // our fastest ant in the iteration
+                Ant bestAntIter = null;
+                double bestCostIter = Double.PositiveInfinity;
+
                 // initialize ants
                 List<Ant> ants = new List<Ant>();
                 for (int i = 0; i < Cities.Length; i++)
@@ -903,23 +918,29 @@ namespace TSP
                     ant.curCost += Cities[ant.curCity].costToGetTo(Cities[ant.startCity]);
 
                     // check against current best cost
-                    if (ant.curCost < bestCost)
+                    if (ant.curCost < bestCostIter)
                     {
-                        bestAnt = ant;
-                        bestCost = ant.curCost;
+                        bestAntIter = ant;
+                        bestCostIter = ant.curCost;
                     }
                 }
 
-                if (bestAnt != null)
+                if (bestAntIter != null)
                 {
                     // apply global trail updating
-                    int current = bestAnt.startCity;
+                    int current = bestAntIter.startCity;
                     do
 	                {
-                        pheromoneLevels[current, bestAnt.tour[current]] += (1 - ALPHA) * pheromoneLevels[current, bestAnt.tour[current]] + ALPHA * (1 / bestCost);
-                        current = bestAnt.tour[current];
-	                } while (current != bestAnt.startCity);
+                        pheromoneLevels[current, bestAntIter.tour[current]] += (1 - ALPHA) * pheromoneLevels[current, bestAntIter.tour[current]] + ALPHA * (1 / bestCostIter);
+                        current = bestAntIter.tour[current];
+	                } while (current != bestAntIter.startCity);
 
+                    // see if it is the best ant through all iterations so far
+                    if (bestCostIter < bestCost)
+                    {
+                        bestAnt = bestAntIter;
+                        bestCost = bestCostIter;
+                    }
                 }
             }
 
